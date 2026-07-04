@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JeremiahServer — Status</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0f0f0f;
+      color: #fff;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    .container { text-align: center; max-width: 520px; padding: 2rem; width: 100%; }
+    .icon {
+      width: 64px; height: 64px;
+      margin: 0 auto 1.5rem;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .icon svg { width: 32px; height: 32px; fill: none; stroke-width: 2; }
+    .icon.red { background: #1a0000; border: 2px solid #7f1d1d; }
+    .icon.red svg { stroke: #ef4444; }
+    .icon.yellow { background: #1a1200; border: 2px solid #92400e; }
+    .icon.yellow svg { stroke: #f59e0b; }
+    .icon.blue { background: #00101a; border: 2px solid #1e4a6e; }
+    .icon.blue svg { stroke: #38bdf8; }
+    .brand { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.2em; color: #d97706; text-transform: uppercase; margin-bottom: 0.75rem; }
+    h1 { font-size: 1.75rem; font-weight: 700; color: #fff; margin-bottom: 0.75rem; }
+    p { color: #6b7280; font-size: 0.9rem; line-height: 1.6; margin-bottom: 2rem; }
+    .status { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; text-align: left; }
+    .status-row { display: flex; justify-content: space-between; align-items: center; padding: 0.4rem 0; font-size: 0.8rem; border-bottom: 1px solid #1f1f1f; }
+    .status-row:last-child { border-bottom: none; }
+    .status-label { color: #6b7280; }
+    .status-val { font-weight: 600; }
+    .val-red { color: #ef4444; }
+    .val-yellow { color: #f59e0b; }
+    .val-blue { color: #38bdf8; }
+    .val-green { color: #4ade80; }
+    .val-gold { color: #d97706; }
+    .components { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; text-align: left; }
+    .component-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; font-size: 0.8rem; border-bottom: 1px solid #1f1f1f; }
+    .component-row:last-child { border-bottom: none; }
+    .component-name { color: #fff; }
+    .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    .dot.green { background: #4ade80; }
+    .dot.red { background: #ef4444; }
+    .dot.yellow { background: #f59e0b; }
+    .btn { background: transparent; padding: 0.6rem 1.5rem; border-radius: 8px; font-size: 0.85rem; cursor: pointer; transition: all 0.2s; margin: 0.25rem; }
+    .btn-red { border: 1px solid #7f1d1d; color: #ef4444; }
+    .btn-red:hover { background: rgba(127,29,29,0.2); }
+    .btn-gold { border: 1px solid #92400e; color: #d97706; }
+    .btn-gold:hover { background: rgba(146,64,14,0.2); }
+    .spin { animation: spin 2s linear infinite; }
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="icon red" id="icon">
+      <svg id="iconsvg" viewBox="0 0 24 24">
+        <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+      </svg>
+    </div>
+    <div class="brand">JeremiahServer</div>
+    <h1 id="title">Server Offline</h1>
+    <p id="desc">The server is currently unreachable. It will come back online shortly.</p>
+
+    <div class="status">
+      <div class="status-row">
+        <span class="status-label">Status</span>
+        <span class="status-val val-red" id="statusval">Unreachable</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Down since</span>
+        <span class="status-val val-gold" id="downsince">—</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Down for</span>
+        <span class="status-val val-gold" id="elapsed">0s</span>
+      </div>
+      <div class="status-row">
+        <span class="status-label">Checking again in</span>
+        <span class="status-val val-gold" id="countdown">30s</span>
+      </div>
+    </div>
+
+    <div class="components" id="components">
+      <div class="component-row">
+        <span class="component-name"><span class="dot yellow"></span>Dashboard</span>
+        <span class="status-val val-yellow">Checking...</span>
+      </div>
+      <div class="component-row">
+        <span class="component-name"><span class="dot yellow"></span>Nextcloud</span>
+        <span class="status-val val-yellow">Checking...</span>
+      </div>
+      <div class="component-row">
+        <span class="component-name"><span class="dot yellow"></span>Gotify</span>
+        <span class="status-val val-yellow">Checking...</span>
+      </div>
+      <div class="component-row">
+        <span class="component-name"><span class="dot yellow"></span>Network</span>
+        <span class="status-val val-yellow">Checking...</span>
+      </div>
+    </div>
+
+    <div>
+      <button class="btn btn-gold" onclick="window.location.href='https://jeremiahserver'">
+        Try Server →
+      </button>
+      <button class="btn btn-red" onclick="checkServer()">
+        Check Now
+      </button>
+    </div>
+  </div>
+
+  <script>
+    var startTime = Date.now();
+    var SERVER = 'https://jeremiahserver';
+    var INSTATUS_API = 'https://api.instatus.com/v1/jeremiahserver/components';
+    var API_KEY = 'eb53cf714d9203e61a3b113ac9c3b54f';
+
+    // Format elapsed time
+    function formatElapsed(ms) {
+      var s = Math.floor(ms / 1000);
+      var m = Math.floor(s / 60);
+      var h = Math.floor(m / 60);
+      if (h > 0) return h + "h " + (m % 60) + "m";
+      if (m > 0) return m + "m " + (s % 60) + "s";
+      return s + "s";
+    }
+
+    // Set down since time
+    document.getElementById("downsince").textContent = new Date().toLocaleTimeString();
+
+    // Elapsed + countdown timer
+    var retry = 30;
+    setInterval(function() {
+      retry--;
+      document.getElementById("elapsed").textContent = formatElapsed(Date.now() - startTime);
+      document.getElementById("countdown").textContent = retry + "s";
+      if (retry <= 0) {
+        retry = 30;
+        checkServer();
+      }
+    }, 1000);
+
+    // Check if server is back
+    function checkServer() {
+      fetch(SERVER + '/api/auth/check', {mode: 'no-cors'})
+        .then(function() {
+          window.location.href = SERVER;
+        })
+        .catch(function() {});
+    }
+
+    // Load component status from Instatus
+    function loadComponents() {
+      fetch(INSTATUS_API, {
+        headers: { 'Authorization': 'Bearer ' + API_KEY }
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var container = document.getElementById('components');
+        if (!data || !data.length) return;
+        var html = '';
+        data.forEach(function(c) {
+          var dotClass = c.status === 'OPERATIONAL' ? 'green' : c.status === 'UNDERMAINTENANCE' ? 'yellow' : 'red';
+          var label = c.status === 'OPERATIONAL' ? 'Operational' : c.status === 'MAJOROUTAGE' ? 'Major Outage' : c.status === 'MINOROUTAGE' ? 'Minor Outage' : 'Maintenance';
+          var valClass = c.status === 'OPERATIONAL' ? 'val-green' : c.status === 'UNDERMAINTENANCE' ? 'val-yellow' : 'val-red';
+          html += '<div class="component-row"><span class="component-name"><span class="dot ' + dotClass + '"></span>' + c.name + '</span><span class="status-val ' + valClass + '">' + label + '</span></div>';
+        });
+        container.innerHTML = html;
+      })
+      .catch(function() {});
+    }
+
+    loadComponents();
+    setInterval(loadComponents, 30000);
+
+    // Auto-check server every 30s
+    setInterval(checkServer, 30000);
+  </script>
+</body>
+</html>
