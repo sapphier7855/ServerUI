@@ -45,7 +45,6 @@
     .components { background: #1a1a1a; border: 1px solid #2a2a2a; border-radius: 12px; padding: 1rem 1.5rem; margin-bottom: 1.5rem; text-align: left; }
     .component-row { display: flex; justify-content: space-between; align-items: center; padding: 0.5rem 0; font-size: 0.8rem; border-bottom: 1px solid #1f1f1f; }
     .component-row:last-child { border-bottom: none; }
-    .component-name { color: #fff; }
     .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
     .dot.green { background: #4ade80; }
     .dot.red { background: #ef4444; }
@@ -63,12 +62,12 @@
   <div class="container">
     <div class="icon red" id="icon">
       <svg id="iconsvg" viewBox="0 0 24 24">
-        <path d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
+        <path id="iconpath" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>
       </svg>
     </div>
     <div class="brand">JeremiahServer</div>
     <h1 id="title">Server Offline</h1>
-    <p id="desc">The server is currently unreachable. It will come back online shortly.</p>
+    <p id="desc">The server is currently unreachable.</p>
 
     <div class="status">
       <div class="status-row">
@@ -91,99 +90,169 @@
 
     <div class="components" id="components">
       <div class="component-row">
-        <span class="component-name"><span class="dot yellow"></span>Dashboard</span>
-        <span class="status-val val-yellow">Checking...</span>
-      </div>
-      <div class="component-row">
-        <span class="component-name"><span class="dot yellow"></span>Nextcloud</span>
-        <span class="status-val val-yellow">Checking...</span>
-      </div>
-      <div class="component-row">
-        <span class="component-name"><span class="dot yellow"></span>Gotify</span>
-        <span class="status-val val-yellow">Checking...</span>
-      </div>
-      <div class="component-row">
-        <span class="component-name"><span class="dot yellow"></span>Network</span>
-        <span class="status-val val-yellow">Checking...</span>
+        <span><span class="dot yellow"></span>Loading components...</span>
       </div>
     </div>
 
     <div>
-      <button class="btn btn-gold" onclick="window.location.href='https://jeremiahserver'">
-        Try Server →
-      </button>
-      <button class="btn btn-red" onclick="checkServer()">
-        Check Now
-      </button>
+      <button class="btn btn-gold" onclick="tryServer()">Try Server →</button>
+      <button class="btn btn-red" id="retrybtn" onclick="checkAll()">Check Now</button>
     </div>
   </div>
 
   <script>
-    var startTime = Date.now();
     var SERVER = 'https://jeremiahserver';
+    var STATUS_JSON = 'https://raw.githubusercontent.com/sapphier7855/ServerUI/main/status.json';
     var INSTATUS_API = 'https://api.instatus.com/v1/jeremiahserver/components';
-    var API_KEY = 'eb53cf714d9203e61a3b113ac9c3b54f';
+    var INSTATUS_KEY = 'eb53cf714d9203e61a3b113ac9c3b54f';
+    var startTime = Date.now();
 
-    // Format elapsed time
+    var modes = {
+      reboot: {
+        color: 'yellow',
+        title: 'Server Rebooting',
+        desc: 'The server is rebooting and will be back online shortly.',
+        status: 'Rebooting',
+        statusClass: 'val-yellow',
+        iconPath: 'M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15',
+        spin: true
+      },
+      shutdown: {
+        color: 'red',
+        title: 'Server Shutdown',
+        desc: 'The server has been shut down and will not come back online automatically.',
+        status: 'Offline',
+        statusClass: 'val-red',
+        iconPath: 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636',
+        spin: false
+      },
+      update: {
+        color: 'blue',
+        title: 'Server Updating',
+        desc: 'The server is applying system updates and will be back online shortly.',
+        status: 'Updating',
+        statusClass: 'val-blue',
+        iconPath: 'M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12',
+        spin: true
+      },
+      unknown: {
+        color: 'red',
+        title: 'Server Offline',
+        desc: 'The server is currently unreachable. It may be rebooting or experiencing an issue.',
+        status: 'Unreachable',
+        statusClass: 'val-red',
+        iconPath: 'M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z',
+        spin: false
+      }
+    };
+
+    function applyMode(reason) {
+      var m = modes[reason] || modes.unknown;
+      var icon = document.getElementById('icon');
+      var svg = document.getElementById('iconsvg');
+      icon.className = 'icon ' + m.color;
+      document.getElementById('iconpath').setAttribute('d', m.iconPath);
+      if (m.spin) svg.classList.add('spin'); else svg.classList.remove('spin');
+      document.getElementById('title').textContent = m.title;
+      document.getElementById('desc').textContent = m.desc;
+      var sv = document.getElementById('statusval');
+      sv.textContent = m.status;
+      sv.className = 'status-val ' + m.statusClass;
+      if (reason === 'shutdown') {
+        document.getElementById('countdown').textContent = '—';
+        document.getElementById('retrybtn').style.display = 'none';
+      }
+    }
+
     function formatElapsed(ms) {
       var s = Math.floor(ms / 1000);
       var m = Math.floor(s / 60);
       var h = Math.floor(m / 60);
-      if (h > 0) return h + "h " + (m % 60) + "m";
-      if (m > 0) return m + "m " + (s % 60) + "s";
-      return s + "s";
+      if (h > 0) return h + 'h ' + (m % 60) + 'm';
+      if (m > 0) return m + 'm ' + (s % 60) + 's';
+      return s + 's';
     }
 
-    // Set down since time
-    document.getElementById("downsince").textContent = new Date().toLocaleTimeString();
+    // Load status from GitHub
+    function loadStatus() {
+      fetch(STATUS_JSON + '?t=' + Date.now(), {cache: 'no-store'})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          applyMode(d.reason || 'unknown');
+          var ref = d.action_time || d.heartbeat;
+          if (ref) {
+            var downAt = new Date(ref * 1000);
+            document.getElementById('downsince').textContent = downAt.toLocaleTimeString();
+            startTime = downAt.getTime();
+          }
+          if (d.components) {
+            renderComponents(d.components);
+          }
+        })
+        .catch(function() { applyMode('unknown'); });
+    }
 
-    // Elapsed + countdown timer
-    var retry = 30;
-    setInterval(function() {
-      retry--;
-      document.getElementById("elapsed").textContent = formatElapsed(Date.now() - startTime);
-      document.getElementById("countdown").textContent = retry + "s";
-      if (retry <= 0) {
-        retry = 30;
-        checkServer();
-      }
-    }, 1000);
+    // Load components from Instatus
+    function loadComponents() {
+      fetch(INSTATUS_API, {
+        headers: { 'Authorization': 'Bearer ' + INSTATUS_KEY }
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data || !data.length) return;
+        renderComponents(data.map(function(c) {
+          return { name: c.name, status: c.status };
+        }));
+      })
+      .catch(function() {});
+    }
 
-    // Check if server is back
-    function checkServer() {
-      fetch(SERVER + '/api/auth/check', {mode: 'no-cors'})
+    function renderComponents(components) {
+      var html = '';
+      components.forEach(function(c) {
+        var operational = c.status === 'OPERATIONAL';
+        var maintenance = c.status === 'UNDERMAINTENANCE';
+        var dotClass = operational ? 'green' : maintenance ? 'yellow' : 'red';
+        var label = operational ? 'Operational' : maintenance ? 'Maintenance' : c.status === 'MAJOROUTAGE' ? 'Major Outage' : 'Minor Outage';
+        var valClass = operational ? 'val-green' : maintenance ? 'val-yellow' : 'val-red';
+        html += '<div class="component-row"><span><span class="dot ' + dotClass + '"></span>' + c.name + '</span><span class="status-val ' + valClass + '">' + label + '</span></div>';
+      });
+      document.getElementById('components').innerHTML = html;
+    }
+
+    function tryServer() {
+      window.location.href = SERVER;
+    }
+
+    function checkAll() {
+      loadStatus();
+      loadComponents();
+      // Try reaching server
+      fetch(SERVER + '/api/auth/check', {mode: 'no-cors', cache: 'no-store'})
         .then(function() {
           window.location.href = SERVER;
         })
         .catch(function() {});
     }
 
-    // Load component status from Instatus
-    function loadComponents() {
-      fetch(INSTATUS_API, {
-        headers: { 'Authorization': 'Bearer ' + API_KEY }
-      })
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        var container = document.getElementById('components');
-        if (!data || !data.length) return;
-        var html = '';
-        data.forEach(function(c) {
-          var dotClass = c.status === 'OPERATIONAL' ? 'green' : c.status === 'UNDERMAINTENANCE' ? 'yellow' : 'red';
-          var label = c.status === 'OPERATIONAL' ? 'Operational' : c.status === 'MAJOROUTAGE' ? 'Major Outage' : c.status === 'MINOROUTAGE' ? 'Minor Outage' : 'Maintenance';
-          var valClass = c.status === 'OPERATIONAL' ? 'val-green' : c.status === 'UNDERMAINTENANCE' ? 'val-yellow' : 'val-red';
-          html += '<div class="component-row"><span class="component-name"><span class="dot ' + dotClass + '"></span>' + c.name + '</span><span class="status-val ' + valClass + '">' + label + '</span></div>';
-        });
-        container.innerHTML = html;
-      })
-      .catch(function() {});
-    }
+    // Countdown + elapsed
+    document.getElementById('downsince').textContent = new Date().toLocaleTimeString();
+    var retry = 30;
+    setInterval(function() {
+      retry--;
+      document.getElementById('elapsed').textContent = formatElapsed(Date.now() - startTime);
+      var el = document.getElementById('countdown');
+      if (el.textContent !== '—') el.textContent = retry + 's';
+      if (retry <= 0) {
+        retry = 30;
+        checkAll();
+      }
+    }, 1000);
 
+    // Init
+    loadStatus();
     loadComponents();
     setInterval(loadComponents, 30000);
-
-    // Auto-check server every 30s
-    setInterval(checkServer, 30000);
   </script>
 </body>
 </html>
