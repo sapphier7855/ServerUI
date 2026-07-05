@@ -192,7 +192,7 @@
         .then(function(r) { return r.json(); })
         .then(function(d) {
           var now = Date.now() / 1000;
-          var fresh = d.heartbeat && (now - d.heartbeat) < 15;
+          var fresh = d.heartbeat && (now - d.heartbeat) < 360;
           if (fresh && (!d.reason || d.reason === 'unknown')) {
             window.location.href = SERVER;
             return;
