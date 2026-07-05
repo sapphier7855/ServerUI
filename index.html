@@ -95,18 +95,19 @@
     </div>
 
     <div>
-      <button class="btn btn-gold" onclick="tryServer()">Try Server →</button>
       <button class="btn btn-red" id="retrybtn" onclick="checkAll()">Check Now</button>
     </div>
+
   </div>
 
   <script>
     var SERVER = 'https://jeremiahserver';
-    // Local status is authoritative — it's on the same host serving this very page,
-    // so it's always at least as fresh as this page load. GitHub is only a fallback
-    // for the case where local status can't be read at all.
-    var LOCAL_STATUS = '/server-status.json';
-    var GITHUB_STATUS_JSON = 'https://raw.githubusercontent.com/sapphier7855/ServerUI/main/status.json';
+    // This page runs on GitHub Pages, not on the server itself -- there is
+    // no local server-status.json to fetch here. status.json in this same
+    // repo (pushed by the server every 5 min via cron, or immediately on
+    // reboot/shutdown/update via the wrapper scripts) is the only source
+    // of truth available to this page.
+    var STATUS_JSON = 'https://raw.githubusercontent.com/sapphier7855/ServerUI/main/status.json';
     var INSTATUS_API = 'https://api.instatus.com/v1/jeremiahserver/components';
     var INSTATUS_KEY = 'eb53cf714d9203e61a3b113ac9c3b54f';
     var startTime = Date.now();
@@ -150,6 +151,8 @@
       }
     };
 
+    var autoRetryEnabled = true;
+
     function applyMode(reason) {
       var m = modes[reason] || modes.unknown;
       var icon = document.getElementById('icon');
@@ -163,11 +166,15 @@
       sv.textContent = m.status;
       sv.className = 'status-val ' + m.statusClass;
       if (reason === 'shutdown') {
-        document.getElementById('countdown').textContent = '—';
-        document.getElementById('retrybtn').style.display = 'none';
+        // No auto-retry for a deliberate shutdown -- the server isn't coming
+        // back on its own, so polling every 30s is pointless. The button
+        // stays available for a manual check, in case the person knows
+        // it's about to be turned back on.
+        autoRetryEnabled = false;
+        document.getElementById('countdown').textContent = 'Manual only';
       } else {
+        autoRetryEnabled = true;
         document.getElementById('countdown').textContent = retry + 's';
-        document.getElementById('retrybtn').style.display = '';
       }
     }
 
@@ -193,23 +200,13 @@
       return s + 's';
     }
 
-    // Load status: local file first (same host, always freshest available),
-    // GitHub only as a fallback if the local read fails outright (e.g. nginx
-    // itself is too broken to serve a static file, which is rare if it can
-    // serve this page at all).
+    // Load status from this repo's status.json -- the only source available
+    // to a page running on GitHub Pages.
     function loadStatus() {
-      fetch(LOCAL_STATUS + '?t=' + Date.now(), {cache: 'no-store'})
-        .then(function(r) {
-          if (!r.ok) throw new Error('local status not ok: ' + r.status);
-          return r.json();
-        })
+      fetch(STATUS_JSON + '?t=' + Date.now(), {cache: 'no-store'})
+        .then(function(r) { return r.json(); })
         .then(applyStatus)
-        .catch(function() {
-          fetch(GITHUB_STATUS_JSON + '?t=' + Date.now(), {cache: 'no-store'})
-            .then(function(r) { return r.json(); })
-            .then(applyStatus)
-            .catch(function() { applyMode('unknown'); });
-        });
+        .catch(function() { applyMode('unknown'); });
     }
 
     // Load components from Instatus
@@ -240,27 +237,39 @@
       document.getElementById('components').innerHTML = html;
     }
 
-    function tryServer() {
-      window.location.href = SERVER;
-    }
-
     // Verify the server is actually back (readable response, 2xx) before
     // redirecting. Same-origin request to a proxied API route can be read
     // normally — no need for no-cors, which made every prior check a blind
     // guess (any response, including a 502, counted as "success").
     function checkAll() {
+      var btn = document.getElementById('retrybtn');
+      var originalText = btn.textContent;
+      btn.textContent = 'Checking...';
+      btn.disabled = true;
+
       loadStatus();
       loadComponents();
-      fetch(SERVER + '/api/auth/check', {cache: 'no-store'})
-        .then(function(r) {
-          if (r.ok) {
+      // Cross-origin fetch to the real server would need CORS headers on
+      // that endpoint to be readable at all -- rather than assume those
+      // exist, use a fresh heartbeat in status.json as proof of life. The
+      // heartbeat is only written by app.py while it's actually running,
+      // so a heartbeat within the last ~15s is strong evidence the server
+      // is back, without needing a readable cross-origin response.
+      fetch(STATUS_JSON + '?t=' + Date.now(), {cache: 'no-store'})
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+          var now = Date.now() / 1000;
+          var fresh = d.heartbeat && (now - d.heartbeat) < 15;
+          if (fresh && (!d.reason || d.reason === 'unknown')) {
             window.location.href = SERVER;
+            return;
           }
-          // Non-2xx (still down / still erroring) — stay put, next status
-          // poll and countdown tick will reflect the real state.
+          btn.textContent = originalText;
+          btn.disabled = false;
         })
         .catch(function() {
-          // Network error / unreachable — stay put.
+          btn.textContent = originalText;
+          btn.disabled = false;
         });
     }
 
@@ -268,10 +277,11 @@
     document.getElementById('downsince').textContent = new Date().toLocaleTimeString();
     var retry = 30;
     setInterval(function() {
-      retry--;
       document.getElementById('elapsed').textContent = formatElapsed(Date.now() - startTime);
+      if (!autoRetryEnabled) return;
+      retry--;
       var el = document.getElementById('countdown');
-      if (el.textContent !== '—') el.textContent = retry + 's';
+      el.textContent = retry + 's';
       if (retry <= 0) {
         retry = 30;
         checkAll();
