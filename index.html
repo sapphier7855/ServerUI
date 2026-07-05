@@ -102,7 +102,11 @@
 
   <script>
     var SERVER = 'https://jeremiahserver';
-    var STATUS_JSON = 'https://raw.githubusercontent.com/sapphier7855/ServerUI/main/status.json';
+    // Local status is authoritative — it's on the same host serving this very page,
+    // so it's always at least as fresh as this page load. GitHub is only a fallback
+    // for the case where local status can't be read at all.
+    var LOCAL_STATUS = '/server-status.json';
+    var GITHUB_STATUS_JSON = 'https://raw.githubusercontent.com/sapphier7855/ServerUI/main/status.json';
     var INSTATUS_API = 'https://api.instatus.com/v1/jeremiahserver/components';
     var INSTATUS_KEY = 'eb53cf714d9203e61a3b113ac9c3b54f';
     var startTime = Date.now();
@@ -161,6 +165,22 @@
       if (reason === 'shutdown') {
         document.getElementById('countdown').textContent = '—';
         document.getElementById('retrybtn').style.display = 'none';
+      } else {
+        document.getElementById('countdown').textContent = retry + 's';
+        document.getElementById('retrybtn').style.display = '';
+      }
+    }
+
+    function applyStatus(d) {
+      applyMode(d.reason || 'unknown');
+      var ref = d.action_time || d.heartbeat;
+      if (ref) {
+        var downAt = new Date(ref * 1000);
+        document.getElementById('downsince').textContent = downAt.toLocaleTimeString();
+        startTime = downAt.getTime();
+      }
+      if (d.components) {
+        renderComponents(d.components);
       }
     }
 
@@ -173,23 +193,23 @@
       return s + 's';
     }
 
-    // Load status from GitHub
+    // Load status: local file first (same host, always freshest available),
+    // GitHub only as a fallback if the local read fails outright (e.g. nginx
+    // itself is too broken to serve a static file, which is rare if it can
+    // serve this page at all).
     function loadStatus() {
-      fetch(STATUS_JSON + '?t=' + Date.now(), {cache: 'no-store'})
-        .then(function(r) { return r.json(); })
-        .then(function(d) {
-          applyMode(d.reason || 'unknown');
-          var ref = d.action_time || d.heartbeat;
-          if (ref) {
-            var downAt = new Date(ref * 1000);
-            document.getElementById('downsince').textContent = downAt.toLocaleTimeString();
-            startTime = downAt.getTime();
-          }
-          if (d.components) {
-            renderComponents(d.components);
-          }
+      fetch(LOCAL_STATUS + '?t=' + Date.now(), {cache: 'no-store'})
+        .then(function(r) {
+          if (!r.ok) throw new Error('local status not ok: ' + r.status);
+          return r.json();
         })
-        .catch(function() { applyMode('unknown'); });
+        .then(applyStatus)
+        .catch(function() {
+          fetch(GITHUB_STATUS_JSON + '?t=' + Date.now(), {cache: 'no-store'})
+            .then(function(r) { return r.json(); })
+            .then(applyStatus)
+            .catch(function() { applyMode('unknown'); });
+        });
     }
 
     // Load components from Instatus
@@ -224,15 +244,24 @@
       window.location.href = SERVER;
     }
 
+    // Verify the server is actually back (readable response, 2xx) before
+    // redirecting. Same-origin request to a proxied API route can be read
+    // normally — no need for no-cors, which made every prior check a blind
+    // guess (any response, including a 502, counted as "success").
     function checkAll() {
       loadStatus();
       loadComponents();
-      // Try reaching server
-      fetch(SERVER + '/api/auth/check', {mode: 'no-cors', cache: 'no-store'})
-        .then(function() {
-          window.location.href = SERVER;
+      fetch(SERVER + '/api/auth/check', {cache: 'no-store'})
+        .then(function(r) {
+          if (r.ok) {
+            window.location.href = SERVER;
+          }
+          // Non-2xx (still down / still erroring) — stay put, next status
+          // poll and countdown tick will reflect the real state.
         })
-        .catch(function() {});
+        .catch(function() {
+          // Network error / unreachable — stay put.
+        });
     }
 
     // Countdown + elapsed
